@@ -6,7 +6,6 @@
 import { window, Pseudoterminal, EventEmitter, TerminalDimensions, workspace, ConfigurationTarget, Disposable, UIKind, env, EnvironmentVariableMutatorType, EnvironmentVariableMutator, extensions, ExtensionContext, TerminalOptions, ExtensionTerminalOptions, Terminal } from 'vscode';
 import { doesNotThrow, equal, deepEqual, throws, strictEqual } from 'assert';
 import { assertNoRpc } from '../utils';
-import * as os from 'os';
 
 // Disable terminal tests:
 // - Web https://github.com/microsoft/vscode/issues/92826
@@ -669,8 +668,7 @@ import * as os from 'os';
 			});
 		});
 
-		// https://github.com/microsoft/vscode/issues/128710
-		(os.platform() === 'win32' ? suite.skip : suite)('environmentVariableCollection', () => {
+		suite('environmentVariableCollection', () => {
 			test('should have collection variables apply to terminals immediately after setting', (done) => {
 				// Text to match on before passing the test
 				const expectedText = [
@@ -678,12 +676,14 @@ import * as os from 'os';
 					'b1~b2~',
 					'~c2~c1'
 				];
+				let data = '';
 				disposables.push(window.onDidWriteTerminalData(e => {
 					if (terminal !== e.terminal) {
 						return;
 					}
+					data += sanitizeData(e.data);
 					// Multiple expected could show up in the same data event
-					while (expectedText.length > 0 && e.data.indexOf(expectedText[0]) >= 0) {
+					while (expectedText.length > 0 && data.indexOf(expectedText[0]) >= 0) {
 						expectedText.shift();
 						// Check if all string are found, if so finish the test
 						if (expectedText.length === 0) {
@@ -721,12 +721,14 @@ import * as os from 'os';
 					'~b2~',
 					'~c2~'
 				];
+				let data = '';
 				disposables.push(window.onDidWriteTerminalData(e => {
 					if (terminal !== e.terminal) {
 						return;
 					}
+					data += sanitizeData(e.data);
 					// Multiple expected could show up in the same data event
-					while (expectedText.length > 0 && e.data.indexOf(expectedText[0]) >= 0) {
+					while (expectedText.length > 0 && data.indexOf(expectedText[0]) >= 0) {
 						expectedText.shift();
 						// Check if all string are found, if so finish the test
 						if (expectedText.length === 0) {
@@ -763,12 +765,14 @@ import * as os from 'os';
 					'~a1~',
 					'~b1~'
 				];
+				let data = '';
 				disposables.push(window.onDidWriteTerminalData(e => {
 					if (terminal !== e.terminal) {
 						return;
 					}
+					data += sanitizeData(e.data);
 					// Multiple expected could show up in the same data event
-					while (expectedText.length > 0 && e.data.indexOf(expectedText[0]) >= 0) {
+					while (expectedText.length > 0 && data.indexOf(expectedText[0]) >= 0) {
 						expectedText.shift();
 						// Check if all string are found, if so finish the test
 						if (expectedText.length === 0) {
@@ -802,12 +806,14 @@ import * as os from 'os';
 					'~a1~',
 					'~b2~'
 				];
+				let data = '';
 				disposables.push(window.onDidWriteTerminalData(e => {
 					if (terminal !== e.terminal) {
 						return;
 					}
+					data += sanitizeData(e.data);
 					// Multiple expected could show up in the same data event
-					while (expectedText.length > 0 && e.data.indexOf(expectedText[0]) >= 0) {
+					while (expectedText.length > 0 && data.indexOf(expectedText[0]) >= 0) {
 						expectedText.shift();
 						// Check if all string are found, if so finish the test
 						if (expectedText.length === 0) {
@@ -859,3 +865,15 @@ import * as os from 'os';
 		});
 	});
 });
+
+function sanitizeData(data: string): string {
+	// Strip NL/CR so terminal dimensions don't impact tests
+	data = data.replaceAll(/[\r\n]/g, '');
+
+	// Strip escape sequences so winpty/conpty doesn't cause flakiness, do for all platforms for
+	// consistency
+	const terminalCodesRegex = /(?:\u001B|\u009B)[\[\]()#;?]*(?:(?:(?:[a-zA-Z0-9]*(?:;[a-zA-Z0-9]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[0-9A-PR-TZcf-ntqry=><~]))/g;
+	data = data.replaceAll(terminalCodesRegex, '');
+
+	return data;
+}
